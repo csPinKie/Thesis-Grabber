@@ -21,6 +21,10 @@ from tkinter import filedialog, messagebox
 # Maximale Pfadlänge für Windows
 MAX_PATH_LENGTH = 260
 
+# Globale Variablen für die Zähler
+checked_files_count = 0
+copied_files_count = 0
+
 # Standard-Pfad zum Quellverzeichnis
 default_source_dir = r"Downloads"
 
@@ -80,8 +84,25 @@ def hash_filename(filename):
 # Cancel Event für das Backup
 cancel_event = threading.Event()
 
-# Hauptfunktion für den Kopiervorgang
-def start_backup(source_dir, target_dir, save_non_thesis_files):
+# Funktion zum Aktualisieren der Mindestgröße basierend auf dem Slider
+def update_min_file_size(value):
+    global min_file_size_mb
+    min_file_size_mb.set(float(value))  # Aktualisiere den Wert der Mindestgröße
+
+# Funktion zur Aktualisierung der GUI-Zähler
+def update_counters():
+    label_checked_files.config(text=f"Überprüft: {checked_files_count}")
+    label_copied_files.config(text=f"Kopiert: {copied_files_count}")
+    root.update_idletasks()
+
+# Hauptfunktion für den Kopiervorgang (angepasst mit Mindestgröße und DOCX-Unterstützung)
+def start_backup(source_dir, target_dir, save_non_thesis_files, include_docx):
+    global checked_files_count, copied_files_count
+    # Zähler zurücksetzen
+    checked_files_count = 0
+    copied_files_count = 0
+    update_counters()  # Initiale Aktualisierung
+
     # Wörterbuch zum Speichern von Hashes und Dateiinformationen
     thesis_files = {}
 
@@ -89,10 +110,13 @@ def start_backup(source_dir, target_dir, save_non_thesis_files):
     thesis_dir = os.path.join(target_dir, "Thesis")
     os.makedirs(thesis_dir, exist_ok=True)
 
+    # Mindestgröße aus dem Slider-Wert
+    min_size = min_file_size_mb.get()
+
     # Verzeichnisse, die übersprungen werden sollen
     excluded_dirs = {"Python", "Pandas", "Code_Docker", "venv", "Ansys"}
 
-    # Durchsuche das Quellverzeichnis und alle Unterverzeichnisse nach .pdf-Dateien
+    # Durchsuche das Quellverzeichnis und alle Unterverzeichnisse nach Dateien
     for root, dirs, files in os.walk(source_dir):
         if cancel_event.is_set():
             print("Backup abgebrochen.")
@@ -111,78 +135,63 @@ def start_backup(source_dir, target_dir, save_non_thesis_files):
             if cancel_event.is_set():
                 print("Backup abgebrochen.")
                 break
-            if not file.lower().endswith(".pdf"):
+            # Prüfen, ob die Datei ein gewünschtes Format hat
+            if not (file.lower().endswith(".pdf") or (include_docx and file.lower().endswith(".docx"))):
                 continue
             source_file = os.path.join(root, file)
+            checked_files_count += 1  # Datei wurde überprüft
+            update_counters()  # Zähler aktualisieren
+
             if is_path_too_long(source_file):
                 print(f"Überspringe Datei (Pfad zu lang): {source_file}")
                 continue
             filename_without_ext = os.path.splitext(file)[0]
-            # Existenzprüfung vor Zugriff
+            if not thesis_pattern.search(filename_without_ext):
+                print(f"Überspringe Datei (kein Thesis-Keyword): {source_file}")
+                continue
             if not os.path.exists(source_file):
                 print(f"Überspringe Datei (existiert nicht): {source_file}")
                 continue
-            # Überprüfen, ob der Dateiname unerwünschte Wörter enthält
             if unwanted_general_patterns.search(filename_without_ext):
                 print(f"Überspringe Datei (unerwünschte Wörter): {source_file}")
                 continue
-            # Prüfen, ob der Dateiname eines der Thesis-Schlüsselwörter enthält
-            if thesis_pattern.search(filename_without_ext):
-                try:
-                    file_size_mb = os.path.getsize(source_file) / (1024 * 1024)
-                    src_mtime = os.path.getmtime(source_file)
-                except FileNotFoundError:
-                    print(f"Überspringe Datei (Fehler beim Zugriff): {source_file}")
-                    continue
-                if file_size_mb < 1:
-                    print(f"Überspringe Datei (kleiner als 1 MB): {source_file}")
-                    continue
-                filename_hash = hash_filename(filename_without_ext)
-                if filename_hash in thesis_files:
-                    existing_file_info = thesis_files[filename_hash]
-                    if src_mtime > existing_file_info['mtime']:
-                        try:
-                            print(f"Ersetze ältere Datei: {existing_file_info['path']} mit {source_file}")
-                            os.remove(existing_file_info['path'])
-                        except Exception as e:
-                            print(f"Fehler beim Löschen von {existing_file_info['path']}: {e}")
-                            continue
-                        target_file = os.path.join(thesis_dir, os.path.basename(source_file))
-                        if is_path_too_long(target_file):
-                            print(f"Überspringe Kopieren (Zielpfad zu lang): {target_file}")
-                            continue
-                        copy_files(source_file, target_file)
-                        thesis_files[filename_hash] = {'path': target_file, 'mtime': src_mtime}
-                    else:
-                        print(f"Überspringe Datei (ältere Version): {source_file}")
+            try:
+                file_size_mb = os.path.getsize(source_file) / (1024 * 1024)
+                src_mtime = os.path.getmtime(source_file)
+            except FileNotFoundError:
+                print(f"Überspringe Datei (Fehler beim Zugriff): {source_file}")
+                continue
+            if file_size_mb < min_size:
+                print(f"Überspringe Datei (kleiner als {min_size} MB): {source_file}")
+                continue
+
+            filename_hash = hash_filename(filename_without_ext)
+            if filename_hash in thesis_files:
+                existing_file_info = thesis_files[filename_hash]
+                if src_mtime > existing_file_info['mtime']:
+                    try:
+                        print(f"Ersetze ältere Datei: {existing_file_info['path']} mit {source_file}")
+                        os.remove(existing_file_info['path'])
+                    except Exception as e:
+                        print(f"Fehler beim Löschen von {existing_file_info['path']}: {e}")
                         continue
-                else:
                     target_file = os.path.join(thesis_dir, os.path.basename(source_file))
-                    if is_path_too_long(target_file):
-                        print(f"Überspringe Kopieren (Zielpfad zu lang): {target_file}")
-                        continue
                     copy_files(source_file, target_file)
+                    copied_files_count += 1  # Datei wurde kopiert
+                    update_counters()
                     thesis_files[filename_hash] = {'path': target_file, 'mtime': src_mtime}
+                else:
+                    print(f"Überspringe Datei (ältere Version): {source_file}")
+                    continue
             else:
-                if not save_non_thesis_files:
-                    print(f"Überspringe Datei (Nicht-Thesis-Datei): {source_file}")
-                    continue
-                try:
-                    file_size_mb = os.path.getsize(source_file) / (1024 * 1024)
-                    src_mtime = os.path.getmtime(source_file)
-                except FileNotFoundError:
-                    print(f"Überspringe Datei (Fehler beim Zugriff): {source_file}")
-                    continue
-                target_file = os.path.join(target_dir, os.path.basename(source_file))
-                if is_path_too_long(target_file):
-                    print(f"Überspringe Kopieren (Zielpfad zu lang): {target_file}")
-                    continue
-                print(f"Gefundene PDF-Datei: {source_file}")
+                target_file = os.path.join(thesis_dir, os.path.basename(source_file))
                 copy_files(source_file, target_file)
+                copied_files_count += 1  # Datei wurde kopiert
+                update_counters()
+                thesis_files[filename_hash] = {'path': target_file, 'mtime': src_mtime}
 
     print(f"Backup abgeschlossen. Dateien wurden in {target_dir} gespeichert.")
     messagebox.showinfo("Fertig", f"Backup abgeschlossen.\nDateien wurden in {target_dir} gespeichert.")
-    # Buttons wieder aktivieren/deaktivieren
     button_start.config(state=tk.NORMAL)
     button_cancel.config(state=tk.DISABLED)
 
@@ -205,6 +214,7 @@ def start_backup_thread():
     source_dir = entry_source_dir.get()
     target_dir = entry_target_dir.get()
     save_non_thesis_files = var_save_all_pdfs.get()
+    include_docx = var_include_docx.get()  # Neue Variable
     if not source_dir:
         messagebox.showwarning("Warnung", "Bitte wählen Sie ein Quellverzeichnis aus.")
         return
@@ -220,12 +230,14 @@ def start_backup_thread():
         except Exception as e:
             messagebox.showerror("Fehler", f"Kann Zielverzeichnis nicht erstellen:\n{e}")
             return
+
     # Starten des Backups in einem separaten Thread
     cancel_event.clear()
-    threading.Thread(target=start_backup, args=(source_dir, target_dir, save_non_thesis_files), daemon=True).start()
+    threading.Thread(target=start_backup, args=(source_dir, target_dir, save_non_thesis_files, include_docx), daemon=True).start()
     # Buttons aktivieren/deaktivieren
     button_start.config(state=tk.DISABLED)
     button_cancel.config(state=tk.NORMAL)
+
 
 # Funktion zum Abbrechen des Backups
 def cancel_backup():
@@ -260,6 +272,9 @@ class ToolTip(object):
 # Erstelle die GUI
 root = tk.Tk()
 root.title("Thesis Backup Tool")
+
+# Variable für die Mindestgröße
+min_file_size_mb = tk.DoubleVar(value=1)  # Standardwert 1 MB
 
 # Farben anpassen (Mercedes-Farben)
 background_color = "#000000"  # Schwarz
@@ -304,26 +319,53 @@ label_target_help = tk.Label(root, text="?", fg="blue", cursor="question_arrow",
 label_target_help.grid(row=2, column=3, padx=5, pady=5)
 ToolTip(label_target_help, text="Wählen Sie das Zielverzeichnis aus, in das die PDFs kopiert werden sollen.\nEin 'Thesis'-Ordner wird darin erstellt.")
 
+# Slider hinzufügen
+label_min_file_size = tk.Label(root, text="Mindestgröße (MB):", bg=background_color, fg=foreground_color)
+label_min_file_size.grid(row=3, column=0, padx=10, pady=5, sticky="e")
+
+slider_min_file_size = tk.Scale(root, from_=0, to=5, resolution=0.1, orient=tk.HORIZONTAL, length=200,
+                                bg=background_color, fg=foreground_color, highlightbackground=background_color,
+                                command=update_min_file_size)
+slider_min_file_size.set(min_file_size_mb.get())  # Setze den Standardwert
+slider_min_file_size.grid(row=3, column=1, padx=10, pady=5)
+
 # Checkbox für Speichern aller PDFs
 var_save_all_pdfs = tk.BooleanVar(value=False)
 checkbox_save_all_pdfs = tk.Checkbutton(root, text="Alle PDFs speichern", variable=var_save_all_pdfs, bg=background_color, fg=foreground_color, selectcolor=background_color)
-checkbox_save_all_pdfs.grid(row=3, column=1, padx=10, pady=5)
+checkbox_save_all_pdfs.grid(row=4, column=1, padx=10, pady=5)
 
 # Fragezeichen mit Tooltip für Checkbox
 label_save_all_help = tk.Label(root, text="?", fg="blue", cursor="question_arrow", bg=background_color)
-label_save_all_help.grid(row=3, column=2, padx=5, pady=5)
+label_save_all_help.grid(row=4, column=2, padx=5, pady=5)
 ToolTip(label_save_all_help, text="Wenn aktiviert, werden alle PDFs gespeichert, nicht nur Thesis-Dateien.")
+
+# Checkbox für DOCX hinzufügen
+var_include_docx = tk.BooleanVar(value=False)
+checkbox_include_docx = tk.Checkbutton(root, text="DOCX-Dateien einbeziehen", variable=var_include_docx, bg=background_color, fg=foreground_color, selectcolor=background_color)
+checkbox_include_docx.grid(row=5, column=1, padx=10, pady=5)
+
+# Fragezeichen mit Tooltip für DOCX-Checkbox
+label_include_docx_help = tk.Label(root, text="?", fg="blue", cursor="question_arrow", bg=background_color)
+label_include_docx_help.grid(row=5, column=2, padx=5, pady=5)
+ToolTip(label_include_docx_help, text="Wenn aktiviert, werden auch DOCX-Dateien nach den gleichen Kriterien wie PDFs durchsucht und kopiert.")
 
 # Start- und Abbrechen-Buttons
 button_start = tk.Button(root, text="Backup starten", command=start_backup_thread, bg=foreground_color, fg=background_color)
-button_start.grid(row=4, column=1, padx=10, pady=10)
+button_start.grid(row=6, column=1, padx=10, pady=10)
 
 button_cancel = tk.Button(root, text="Abbrechen", command=cancel_backup, state=tk.DISABLED, bg=foreground_color, fg=background_color)
-button_cancel.grid(row=4, column=2, padx=10, pady=10)
+button_cancel.grid(row=11, column=2, padx=10, pady=10)
+
+# Labels für Zähler hinzufügen
+label_checked_files = tk.Label(root, text="Überprüft: 0", bg=background_color, fg=foreground_color)
+label_checked_files.grid(row=8, column=1, padx=10, pady=5)
+
+label_copied_files = tk.Label(root, text="Kopiert: 0", bg=background_color, fg=foreground_color)
+label_copied_files.grid(row=9, column=1, padx=10, pady=5)
 
 # Credits und Version
 label_credits = tk.Label(root, text="Made by csPinKie & koreanski, Version 0.9.0.1 (2024)", bg=background_color, fg=foreground_color)
-label_credits.grid(row=5, column=0, columnspan=4, padx=10, pady=10)
+label_credits.grid(row=11, column=0, columnspan=4, padx=10, pady=10)
 
 # Hauptschleife starten
 root.mainloop()
