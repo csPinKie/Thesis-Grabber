@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Created on Wed Nov 20 10:45:52 2024
 @author: koreanski & csPinKie
-Version: 0.9.0.1 (2024)
+Version: 0.9.1.0. (2024)
 
 Beschreibung:
 Dieses Tool dient dazu, PDF-Dateien aus einem Quellverzeichnis zu durchsuchen und alle Thesis-bezogenen PDFs in ein Zielverzeichnis zu kopieren.
@@ -42,9 +42,8 @@ thesis_keywords = [
     'Examensarbeit', 'Staatsexamensarbeit', 'Magisterarbeit',
     'Zulassungsarbeit', 'Semesterarbeit', 'Forschungsarbeit',
     'Praktikumsbericht', 'Promotion', 'Promotionsarbeit',
-    'Lizentiatsarbeit', 'Technikerarbeit',
+    'Lizentiatsarbeit', 'Technikerarbeit',]
 
-]
 thesis_pattern = re.compile('|'.join(thesis_keywords), re.IGNORECASE)
 
 # Funktion zum Überprüfen der Pfadlänge
@@ -364,7 +363,7 @@ label_copied_files = tk.Label(root, text="Kopiert: 0", bg=background_color, fg=f
 label_copied_files.grid(row=9, column=1, padx=10, pady=5)
 
 # Credits und Version
-label_credits = tk.Label(root, text="Made by csPinKie & koreanski, Version 0.9.0.1 (2024)", bg=background_color, fg=foreground_color)
+label_credits = tk.Label(root, text="Made by csPinKie & koreanski, Version 0.9.1.0 (2024)", bg=background_color, fg=foreground_color)
 label_credits.grid(row=11, column=0, columnspan=4, padx=10, pady=10)
 
 # Hauptschleife starten
