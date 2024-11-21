@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Created on Wed Nov 20 10:45:52 2024
-@author: DHEBLIK & KAI
-Version: 0.9 (2024)
+@author: koreanski & csPinKie
+Version: 0.9.0.1 (2024)
 
 Beschreibung:
 Dieses Tool dient dazu, PDF-Dateien aus einem Quellverzeichnis zu durchsuchen und alle Thesis-bezogenen PDFs in ein Zielverzeichnis zu kopieren.
@@ -322,7 +322,7 @@ button_cancel = tk.Button(root, text="Abbrechen", command=cancel_backup, state=t
 button_cancel.grid(row=4, column=2, padx=10, pady=10)
 
 # Credits und Version
-label_credits = tk.Label(root, text="Made by csPinKie & koreanski, Version 0.8 (2024)", bg=background_color, fg=foreground_color)
+label_credits = tk.Label(root, text="Made by csPinKie & koreanski, Version 0.9.0.1 (2024)", bg=background_color, fg=foreground_color)
 label_credits.grid(row=5, column=0, columnspan=4, padx=10, pady=10)
 
 # Hauptschleife starten
